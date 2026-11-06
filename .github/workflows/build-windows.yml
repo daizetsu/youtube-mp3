@@ -3,7 +3,7 @@ name: Gerar executavel Windows
 on:
   workflow_dispatch:
   push:
-    tags: ["v*"]
+    branches: [main]
 
 permissions:
   contents: write
@@ -40,7 +40,12 @@ jobs:
           path: dist/YouTube-MP3.exe
 
       - name: Publicar na pagina de Releases
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: YouTube MP3 v1.0.${{ github.run_number }}
+          make_latest: true
           files: dist/YouTube-MP3.exe
+          body: |
+            Baixe o **YouTube-MP3.exe** abaixo e de dois cliques. Nao precisa instalar nada.
+            Na primeira vez, se aparecer "O Windows protegeu o computador", clique em **Mais informacoes** e depois em **Executar assim mesmo**.
