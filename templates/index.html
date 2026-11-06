@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YouTube para MP3</title>
+<link rel="icon" href="/static/icone.png">
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --fg:#1b1b1b; --muted:#6b6b6b; --line:#dcdcd6; --accent:#d93025; --ok:#1e7e34; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121212; --card:#1c1c1c; --fg:#ededed; --muted:#9a9a9a; --line:#333; --accent:#ff5a4e; --ok:#5cc47a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:16px;
+         background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { width:100%; max-width:520px; background:var(--card); border:1px solid var(--line);
+         border-radius:14px; padding:28px; }
+  h1 { margin:0 0 4px; font-size:1.4rem; }
+  p.sub { margin:0 0 20px; color:var(--muted); font-size:.95rem; }
+  form { display:flex; flex-direction:column; gap:12px; }
+  input { width:100%; padding:13px 14px; font-size:1rem; border:1px solid var(--line);
+          border-radius:10px; background:transparent; color:var(--fg); }
+  input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  button { padding:13px; font-size:1rem; font-weight:600; border:0; border-radius:10px;
+           background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:progress; }
+  #status { min-height:1.5em; margin:14px 0 0; font-size:.95rem; color:var(--muted); }
+  #status.erro { color:var(--accent); }
+  #status.ok { color:var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <h1>YouTube → MP3</h1>
+  <p class="sub">Cole o link do vídeo e baixe o áudio em MP3 320 kbps. O arquivo vai para a pasta Downloads.</p>
+  <form id="form">
+    <input id="url" name="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required autofocus>
+    <button id="btn" type="submit">Converter e baixar</button>
+  </form>
+  <p id="status" role="status"></p>
+</main>
+<script>
+const form = document.getElementById('form');
+const btn = document.getElementById('btn');
+const status = document.getElementById('status');
+
+// Mantém o programa vivo enquanto a janela estiver aberta.
+const ping = () => fetch('/ping').catch(() => {});
+ping();
+setInterval(ping, 3000);
+
+function setStatus(msg, cls = '') { status.textContent = msg; status.className = cls; }
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  btn.textContent = 'Convertendo…';
+  setStatus('Baixando e convertendo o áudio. Isso pode levar alguns segundos.');
+  try {
+    const resp = await fetch('/converter', { method: 'POST', body: new FormData(form) });
+    if (!resp.ok) {
+      const dados = await resp.json().catch(() => ({}));
+      throw new Error(dados.erro || 'Falha na conversão.');
+    }
+    const blob = await resp.blob();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+    const nome = m ? decodeURIComponent(m[1]) : 'audio.mp3';
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = nome;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    setStatus('Pronto! Download iniciado: ' + nome, 'ok');
+    form.reset();
+  } catch (err) {
+    setStatus(err.message, 'erro');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Converter e baixar';
+  }
+});
+</script>
+</body>
+</html>
