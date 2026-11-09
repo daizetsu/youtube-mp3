@@ -4,8 +4,9 @@ Cole um link do YouTube e baixe o áudio em **MP3 320 kbps** (com título e capa
 
 ## Windows: só clicar
 1. Copie `dist/YouTube-MP3.exe` para onde quiser (ex.: Documentos).
-2. Dê dois cliques. Abre uma janela do aplicativo; os MP3 vão para **Downloads**.
-3. Para ter atalho: clique com o botão direito no ícone da barra de tarefas → **Fixar na barra de tarefas**.
+2. Dê dois cliques. Abre uma janela do aplicativo.
+3. Cole um ou vários links (um por linha; playlists também). Eles são convertidos vários ao mesmo tempo e salvos sozinhos em **Downloads\YouTube MP3**.
+4. Para ter atalho: clique com o botão direito no ícone da barra de tarefas → **Fixar na barra de tarefas**.
 
 Na primeira vez o Windows pode avisar "O Windows protegeu o computador" (o programa não tem assinatura digital): clique em **Mais informações → Executar assim mesmo**.
 Fechar a janela encerra o programa. Não precisa instalar Python nem ffmpeg.

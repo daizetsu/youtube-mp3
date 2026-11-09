@@ -6,82 +6,158 @@
 <title>YouTube para MP3</title>
 <link rel="icon" href="/static/icone.png">
 <style>
-  :root { --bg:#f6f6f4; --card:#fff; --fg:#1b1b1b; --muted:#6b6b6b; --line:#dcdcd6; --accent:#d93025; --ok:#1e7e34; }
+  :root { --bg:#f6f6f4; --card:#fff; --fg:#1b1b1b; --muted:#6b6b6b; --line:#dcdcd6; --track:#ececE7;
+          --accent:#d93025; --ok:#1e7e34; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#121212; --card:#1c1c1c; --fg:#ededed; --muted:#9a9a9a; --line:#333; --accent:#ff5a4e; --ok:#5cc47a; }
+    :root { --bg:#121212; --card:#1c1c1c; --fg:#ededed; --muted:#9a9a9a; --line:#333; --track:#2a2a2a;
+            --accent:#ff5a4e; --ok:#5cc47a; }
   }
   * { box-sizing: border-box; }
-  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:16px;
-         background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { width:100%; max-width:520px; background:var(--card); border:1px solid var(--line);
-         border-radius:14px; padding:28px; }
-  h1 { margin:0 0 4px; font-size:1.4rem; }
-  p.sub { margin:0 0 20px; color:var(--muted); font-size:.95rem; }
-  form { display:flex; flex-direction:column; gap:12px; }
-  input { width:100%; padding:13px 14px; font-size:1rem; border:1px solid var(--line);
-          border-radius:10px; background:transparent; color:var(--fg); }
-  input:focus { outline:2px solid var(--accent); outline-offset:1px; }
-  button { padding:13px; font-size:1rem; font-weight:600; border:0; border-radius:10px;
-           background:var(--accent); color:#fff; cursor:pointer; }
-  button:disabled { opacity:.6; cursor:progress; }
-  #status { min-height:1.5em; margin:14px 0 0; font-size:.95rem; color:var(--muted); }
-  #status.erro { color:var(--accent); }
-  #status.ok { color:var(--ok); }
+  body { margin:0; min-height:100vh; padding:24px 16px; background:var(--bg); color:var(--fg);
+         font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:640px; margin:0 auto; background:var(--card); border:1px solid var(--line);
+         border-radius:14px; padding:24px; }
+  h1 { margin:0 0 4px; font-size:1.35rem; }
+  p.sub { margin:0 0 16px; color:var(--muted); font-size:.92rem; }
+  textarea { width:100%; min-height:110px; resize:vertical; padding:12px 14px; font:inherit;
+             border:1px solid var(--line); border-radius:10px; background:transparent; color:var(--fg); }
+  textarea:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .linha { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  button, a.botao { padding:10px 16px; font:inherit; font-weight:600; border-radius:10px; cursor:pointer;
+                    border:1px solid var(--line); background:transparent; color:var(--fg); text-decoration:none; }
+  button.principal { background:var(--accent); border-color:var(--accent); color:#fff; flex:1; min-width:180px; }
+  button:disabled { opacity:.55; cursor:default; }
+  #aviso { min-height:1.4em; margin:10px 0 0; font-size:.9rem; color:var(--muted); }
+  #aviso.erro { color:var(--accent); }
+  .topo-lista { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;
+                margin:22px 0 8px; padding-top:16px; border-top:1px solid var(--line); }
+  .topo-lista h2 { margin:0; font-size:1rem; }
+  .topo-lista .acoes { display:flex; gap:6px; flex-wrap:wrap; }
+  .topo-lista button, .topo-lista a.botao { padding:7px 12px; font-size:.85rem; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; padding:10px 0; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  li > div { min-width:0; }
+  .titulo { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
+  .estado { font-size:.82rem; color:var(--muted); }
+  .estado.ok { color:var(--ok); } .estado.erro { color:var(--accent); white-space:normal; }
+  .barra { grid-column:1 / -1; height:4px; background:var(--track); border-radius:4px; overflow:hidden; }
+  .barra > i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s; }
+  .barra.ok > i { background:var(--ok); }
+  .barra.anim > i { width:35%; animation:vai 1.1s ease-in-out infinite; }
+  @keyframes vai { from { transform:translateX(-100%); } to { transform:translateX(290%); } }
+  @media (prefers-reduced-motion: reduce) { .barra.anim > i { animation:none; width:100%; opacity:.5; } }
+  li a { font-size:.85rem; color:var(--accent); font-weight:600; text-decoration:none; align-self:center; }
+  .vazio { color:var(--muted); font-size:.9rem; padding:8px 0; }
 </style>
 </head>
 <body>
 <main>
   <h1>YouTube → MP3</h1>
-  <p class="sub">Cole o link do vídeo e baixe o áudio em MP3 320 kbps. O arquivo vai para a pasta Downloads.</p>
+  <p class="sub">Cole um ou vários links (um por linha). Playlists também funcionam. Tudo é convertido em MP3 320 kbps, vários ao mesmo tempo.</p>
   <form id="form">
-    <input id="url" name="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required autofocus>
-    <button id="btn" type="submit">Converter e baixar</button>
+    <textarea id="links" name="links" placeholder="https://www.youtube.com/watch?v=...&#10;https://youtu.be/...&#10;https://www.youtube.com/playlist?list=..." required autofocus></textarea>
+    <div class="linha">
+      <button class="principal" id="btn" type="submit">Converter</button>
+    </div>
   </form>
-  <p id="status" role="status"></p>
+  <p id="aviso" role="status"></p>
+
+  <section id="secao" hidden>
+    <div class="topo-lista">
+      <h2 id="resumo">Fila</h2>
+      <div class="acoes">
+        <button id="abrir" type="button" hidden>Abrir pasta</button>
+        <a class="botao" id="zip" href="/zip" hidden>Baixar todos (.zip)</a>
+        <button id="limpar" type="button">Limpar concluídos</button>
+      </div>
+    </div>
+    <ul id="lista"></ul>
+  </section>
 </main>
 <script>
-const form = document.getElementById('form');
-const btn = document.getElementById('btn');
-const status = document.getElementById('status');
+const $ = (id) => document.getElementById(id);
+const form = $('form'), btn = $('btn'), aviso = $('aviso'), lista = $('lista');
 
-// Mantém o programa vivo enquanto a janela estiver aberta.
-const ping = () => fetch('/ping').catch(() => {});
-ping();
-setInterval(ping, 3000);
+function avisar(msg, erro = false) { aviso.textContent = msg; aviso.className = erro ? 'erro' : ''; }
 
-function setStatus(msg, cls = '') { status.textContent = msg; status.className = cls; }
+const ROTULO = { fila: 'Na fila', playlist: 'Lendo playlist…', baixando: 'Baixando', convertendo: 'Convertendo para MP3…',
+                 pronto: 'Pronto', erro: 'Erro' };
+
+function linha(item, local) {
+  const li = document.createElement('li');
+  const titulo = document.createElement('div');
+  titulo.className = 'titulo'; titulo.textContent = item.titulo; titulo.title = item.titulo;
+  const estado = document.createElement('div');
+  estado.className = 'estado';
+  let texto = ROTULO[item.status] || item.status;
+  if (item.status === 'baixando' && item.progresso) texto += ` ${item.progresso}%`;
+  if (item.status === 'pronto') { estado.classList.add('ok'); texto = local ? 'Pronto · salvo na pasta' : 'Pronto'; }
+  if (item.status === 'erro') { estado.classList.add('erro'); texto = 'Erro: ' + (item.erro || 'falha na conversão'); }
+  estado.textContent = texto;
+
+  const esquerda = document.createElement('div');
+  esquerda.append(titulo, estado);
+  li.append(esquerda);
+
+  if (item.status === 'pronto') {
+    const a = document.createElement('a');
+    a.href = `/arquivo/${item.id}`; a.textContent = 'Baixar'; a.download = item.nome || '';
+    li.append(a);
+  } else { li.append(document.createElement('span')); }
+
+  const barra = document.createElement('div');
+  barra.className = 'barra';
+  const i = document.createElement('i');
+  if (item.status === 'baixando') i.style.width = Math.max(item.progresso, 3) + '%';
+  else if (item.status === 'pronto') { barra.classList.add('ok'); i.style.width = '100%'; }
+  else if (item.status === 'convertendo' || item.status === 'playlist') barra.classList.add('anim');
+  if (item.status === 'erro') barra.hidden = true;
+  barra.append(i);
+  li.append(barra);
+  return li;
+}
+
+let ultimoEstado = '';
+async function atualizar() {
+  try {
+    const r = await fetch('/status');
+    const dados = await r.json();
+    const chave = JSON.stringify(dados.itens);
+    $('abrir').hidden = !dados.local;
+    if (chave === ultimoEstado) return;
+    ultimoEstado = chave;
+    const itens = dados.itens;
+    $('secao').hidden = itens.length === 0;
+    const prontos = itens.filter(i => i.status === 'pronto').length;
+    const erros = itens.filter(i => i.status === 'erro').length;
+    const ativos = itens.length - prontos - erros;
+    $('resumo').textContent = `${prontos} de ${itens.length} pronto${itens.length > 1 ? 's' : ''}` +
+      (erros ? ` · ${erros} com erro` : '') + (ativos ? ` · convertendo ${Math.min(ativos, dados.simultaneos)} por vez` : '');
+    $('zip').hidden = prontos === 0;
+    lista.replaceChildren(...itens.slice().reverse().map(i => linha(i, dados.local)));
+  } catch { /* servidor reiniciando */ }
+}
+setInterval(atualizar, 1000);
+atualizar();
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   btn.disabled = true;
-  btn.textContent = 'Convertendo…';
-  setStatus('Baixando e convertendo o áudio. Isso pode levar alguns segundos.');
   try {
-    const resp = await fetch('/converter', { method: 'POST', body: new FormData(form) });
-    if (!resp.ok) {
-      const dados = await resp.json().catch(() => ({}));
-      throw new Error(dados.erro || 'Falha na conversão.');
-    }
-    const blob = await resp.blob();
-    const cd = resp.headers.get('Content-Disposition') || '';
-    const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
-    const nome = m ? decodeURIComponent(m[1]) : 'audio.mp3';
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = nome;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
-    setStatus('Pronto! Download iniciado: ' + nome, 'ok');
+    const r = await fetch('/adicionar', { method: 'POST', body: new FormData(form) });
+    const dados = await r.json();
+    if (!r.ok) throw new Error(dados.erro || 'Não foi possível adicionar.');
+    avisar(`${dados.adicionados} link${dados.adicionados > 1 ? 's adicionados' : ' adicionado'} à fila.`);
     form.reset();
-  } catch (err) {
-    setStatus(err.message, 'erro');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Converter e baixar';
-  }
+    atualizar();
+  } catch (err) { avisar(err.message, true); }
+  finally { btn.disabled = false; $('links').focus(); }
 });
+
+$('limpar').addEventListener('click', async () => { await fetch('/limpar', { method: 'POST' }); atualizar(); });
+$('abrir').addEventListener('click', () => fetch('/abrir-pasta', { method: 'POST' }));
+$('links').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) form.requestSubmit(); });
 </script>
 </body>
 </html>
