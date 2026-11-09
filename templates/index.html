@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YouTube para MP3</title>
 <link rel="icon" href="/static/icone.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="apple-mobile-web-app-title" content="YouTube MP3">
 <style>
   :root { --bg:#f6f6f4; --card:#fff; --fg:#1b1b1b; --muted:#6b6b6b; --line:#dcdcd6; --track:#ececE7;
           --accent:#d93025; --ok:#1e7e34; }
@@ -49,6 +52,15 @@
   @media (prefers-reduced-motion: reduce) { .barra.anim > i { animation:none; width:100%; opacity:.5; } }
   li a { font-size:.85rem; color:var(--accent); font-weight:600; text-decoration:none; align-self:center; }
   .vazio { color:var(--muted); font-size:.9rem; padding:8px 0; }
+  details { margin-top:22px; padding-top:16px; border-top:1px solid var(--line); }
+  summary { cursor:pointer; font-weight:600; }
+  .celular { display:grid; grid-template-columns:auto 1fr; gap:16px; align-items:start; margin-top:12px; }
+  .celular .qr svg { display:block; border-radius:8px; }
+  .celular ol { margin:0; padding-left:18px; font-size:.9rem; }
+  .celular li { display:list-item; padding:2px 0; border:0; }
+  .celular code { font-size:.85rem; word-break:break-all; background:var(--track); padding:1px 5px; border-radius:5px; }
+  .opcao { display:flex; gap:8px; align-items:center; margin-top:12px; font-size:.9rem; }
+  @media (max-width: 520px) { .celular { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -74,6 +86,10 @@
     </div>
     <ul id="lista"></ul>
   </section>
+  <details id="acesso" hidden>
+    <summary>Usar no iPhone (Tailscale)</summary>
+    <div id="acesso-corpo"></div>
+  </details>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -156,6 +172,62 @@ form.addEventListener('submit', async (e) => {
 });
 
 $('limpar').addEventListener('click', async () => { await fetch('/limpar', { method: 'POST' }); atualizar(); });
+async function carregarAcesso() {
+  try {
+    const d = await (await fetch('/acesso')).json();
+    if (!d.local) return;                      // painel só aparece no próprio PC
+    const caixa = $('acesso'), corpo = $('acesso-corpo');
+    caixa.hidden = false;
+    corpo.replaceChildren();
+    if (!d.url) {
+      const p = document.createElement('p');
+      p.className = 'sub';
+      p.textContent = d.tailscale.instalado
+        ? 'O Tailscale está instalado, mas não está conectado. Abra o Tailscale neste PC e faça login.'
+        : 'Instale o Tailscale neste PC e no iPhone (tailscale.com/download) e entre com a mesma conta. Depois reabra este painel.';
+      corpo.append(p);
+    } else {
+      const grade = document.createElement('div'); grade.className = 'celular';
+      const qr = document.createElement('div'); qr.className = 'qr'; qr.innerHTML = d.qr;  // SVG gerado pelo próprio app
+      const ol = document.createElement('ol');
+      const passos = [
+        'No iPhone, abra o app Tailscale e deixe-o conectado.',
+        'Aponte a câmera para o QR code ou abra no Safari:',
+        'Toque em Compartilhar → "Adicionar à Tela de Início".',
+        'Os MP3 baixados no iPhone vão para o app Arquivos.',
+      ];
+      passos.forEach((t, n) => {
+        const li = document.createElement('li'); li.textContent = t;
+        if (n === 1) {
+          const c = document.createElement('code'); c.textContent = d.url;
+          li.append(document.createElement('br'), c);
+          if (d.url_nome) { const c2 = document.createElement('code'); c2.textContent = d.url_nome;
+            li.append(document.createElement('br'), document.createTextNode('ou '), c2); }
+        }
+        ol.append(li);
+      });
+      grade.append(qr, ol);
+      corpo.append(grade);
+    }
+    if (d.inicia_com_windows !== null) {
+      const rotulo = document.createElement('label'); rotulo.className = 'opcao';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = d.inicia_com_windows;
+      cb.addEventListener('change', async () => {
+        const r = await fetch('/inicio-windows', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                   body: JSON.stringify({ ligar: cb.checked }) });
+        cb.checked = (await r.json()).inicia_com_windows;
+      });
+      rotulo.append(cb, document.createTextNode('Iniciar com o Windows (o PC fica sempre pronto para o celular)'));
+      corpo.append(rotulo);
+      const p = document.createElement('p'); p.className = 'sub'; p.style.margin = '8px 0 0';
+      p.textContent = 'Fechar esta janela não desliga o app: ele fica no ícone ao lado do relógio. Para encerrar, clique nele e escolha Sair.';
+      corpo.append(p);
+    }
+  } catch { /* ignora */ }
+}
+carregarAcesso();
+$('acesso').addEventListener('toggle', () => { if ($('acesso').open) carregarAcesso(); });
+
 $('abrir').addEventListener('click', () => fetch('/abrir-pasta', { method: 'POST' }));
 $('links').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) form.requestSubmit(); });
 </script>

@@ -1,2 +1,5 @@
 flask>=3.0
 yt-dlp[default]>=2026.10.26
+pystray>=0.19
+pillow>=10
+segno>=1.6

@@ -1,11 +1,15 @@
 """YouTube -> MP3: converte vários links do YouTube em MP3 320 kbps, em paralelo.
 
-Ao abrir o executável, o servidor sobe em segundo plano e uma janela própria
-(Microsoft Edge em "modo aplicativo") é aberta. Fechar a janela encerra o programa.
+Ao abrir o executável, o servidor sobe em segundo plano, um ícone aparece na
+bandeja do Windows e uma janela própria (Edge em "modo aplicativo") é aberta.
+Fechar a janela não encerra o programa: ele continua atendendo o celular pelo
+Tailscale até você clicar em "Sair" no ícone da bandeja.
 Os MP3 prontos são salvos automaticamente em Downloads/YouTube MP3.
 """
 import io
+import ipaddress
 import itertools
+import json
 import os
 import re
 import shutil
@@ -43,6 +47,12 @@ SIMULTANEOS = max(2, min(6, (os.cpu_count() or 4)))
 
 app = Flask(__name__, template_folder=os.path.join(BASE, "templates"),
             static_folder=os.path.join(BASE, "static"))
+
+# Só o próprio PC e aparelhos da sua rede Tailscale podem acessar.
+REDES_PERMITIDAS = [ipaddress.ip_network(r) for r in (
+    "127.0.0.0/8", "::1/128",
+    "100.64.0.0/10", "fd7a:115c:a1e0::/48",       # faixas de endereço do Tailscale
+)]
 
 LINK_RE = re.compile(
     r"(?:https?://)?(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)/[^\s,;\"'<>]+", re.I)
@@ -183,7 +193,104 @@ def _local() -> bool:
     return request.remote_addr in ("127.0.0.1", "::1")
 
 
+def _ip_permitido(endereco: str | None) -> bool:
+    try:
+        ip = ipaddress.ip_address((endereco or "").split("%")[0])
+    except ValueError:
+        return False
+    if getattr(ip, "ipv4_mapped", None):
+        ip = ip.ipv4_mapped
+    return any(ip in rede for rede in REDES_PERMITIDAS)
+
+
+# ------------------------------------------------------------- tailscale
+
+_SEM_JANELA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+_cache_ts = {"quando": 0.0, "dados": None}
+
+
+def _tailscale_cli() -> str | None:
+    for c in (shutil.which("tailscale"),
+              os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                           "Tailscale", "tailscale.exe")):
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def info_tailscale() -> dict:
+    """Endereços deste PC na rede Tailscale (com cache de 20 s)."""
+    if time.time() - _cache_ts["quando"] < 20 and _cache_ts["dados"]:
+        return _cache_ts["dados"]
+    dados = {"instalado": False, "conectado": False, "ip": None, "nome": None}
+    cli = _tailscale_cli()
+    if cli:
+        dados["instalado"] = True
+        try:
+            saida = subprocess.run([cli, "status", "--json"], capture_output=True, timeout=5,
+                                   creationflags=_SEM_JANELA).stdout
+            st = json.loads(saida or b"{}")
+            eu = st.get("Self") or {}
+            ips = [i for i in (eu.get("TailscaleIPs") or []) if "." in i]
+            if st.get("BackendState") == "Running" and ips:
+                dados.update(conectado=True, ip=ips[0],
+                             nome=(eu.get("DNSName") or "").rstrip(".") or None)
+        except Exception:  # noqa: BLE001
+            pass
+    if not dados["ip"]:
+        # Sem a linha de comando: procura um endereço 100.64.0.0/10 nas interfaces.
+        try:
+            for fam, _, _, _, end in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                if ipaddress.ip_address(end[0]) in REDES_PERMITIDAS[2]:
+                    dados.update(conectado=True, ip=end[0])
+                    break
+        except OSError:
+            pass
+    _cache_ts.update(quando=time.time(), dados=dados)
+    return dados
+
+
+# ------------------------------------------------------- iniciar com o Windows
+
+_CHAVE_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_NOME_RUN = "YouTube MP3"
+
+
+def inicia_com_windows() -> bool | None:
+    """None = indisponível (não é Windows / não é o .exe)."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return None
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _CHAVE_RUN) as k:
+            winreg.QueryValueEx(k, _NOME_RUN)
+            return True
+    except OSError:
+        return False
+
+
+def definir_inicio_windows(ligar: bool) -> None:
+    if inicia_com_windows() is None:
+        return
+    import winreg
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _CHAVE_RUN, 0, winreg.KEY_SET_VALUE) as k:
+        if ligar:
+            winreg.SetValueEx(k, _NOME_RUN, 0, winreg.REG_SZ,
+                              f'"{sys.executable}" --segundo-plano')
+        else:
+            try:
+                winreg.DeleteValue(k, _NOME_RUN)
+            except OSError:
+                pass
+
+
 # ------------------------------------------------------------------- rotas
+
+@app.before_request
+def so_rede_permitida():
+    if not _ip_permitido(request.remote_addr):
+        abort(403)
+
 
 @app.get("/")
 def index():
@@ -258,6 +365,27 @@ def limpar():
     return jsonify(ok=True)
 
 
+@app.get("/acesso")
+def acesso():
+    ts = info_tailscale()
+    url = f"http://{ts['ip']}:{PORTA_PADRAO}" if ts["ip"] else None
+    qr = None
+    if url:
+        import segno
+        qr = segno.make_qr(url).svg_inline(scale=5, border=2, dark="#000", light="#fff")
+    return jsonify(tailscale=ts, url=url,
+                   url_nome=f"http://{ts['nome']}:{PORTA_PADRAO}" if ts["nome"] else None,
+                   qr=qr, inicia_com_windows=inicia_com_windows(), local=_local())
+
+
+@app.post("/inicio-windows")
+def inicio_windows():
+    if not _local():
+        abort(403)
+    definir_inicio_windows(bool((request.get_json(silent=True) or {}).get("ligar")))
+    return jsonify(inicia_com_windows=inicia_com_windows())
+
+
 @app.post("/abrir-pasta")
 def abrir_pasta():
     if not _local():
@@ -327,7 +455,7 @@ def _ocupado() -> bool:
 
 
 def vigiar(processo: subprocess.Popen | None) -> None:
-    """Encerra o programa quando a janela é fechada (e nada está convertendo)."""
+    """Sem bandeja (Linux/macOS): encerra quando a janela é fechada e nada converte."""
     inicio = time.time()
     while True:
         time.sleep(2)
@@ -335,36 +463,71 @@ def vigiar(processo: subprocess.Popen | None) -> None:
             continue
         with _lock:
             ultimo = _estado["ultimo_ping"]
-        # Sem sinal da página por muito tempo (ou nunca abriu) => janela fechada.
         referencia = ultimo or inicio
-        limite = 150 if ultimo else 120
-        if time.time() - referencia > limite:
+        if time.time() - referencia > (150 if ultimo else 120):
             os._exit(0)
-        # Se nós abrimos a janela e o processo dela terminou, sai logo.
         if processo is not None and processo.poll() is not None and ultimo \
                 and time.time() - ultimo > 10:
             os._exit(0)
 
 
+def rodar_bandeja(endereco: str) -> None:
+    """Ícone ao lado do relógio do Windows: Abrir / Iniciar com o Windows / Sair."""
+    import pystray
+    from PIL import Image
+
+    def sair(icone, _item=None):
+        if _ocupado():
+            icone.notify("Ainda há conversões em andamento; elas serão interrompidas.",
+                         "YouTube MP3")
+            time.sleep(2)
+        icone.stop()
+        os._exit(0)
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Abrir YouTube MP3", lambda: abrir_janela(endereco), default=True),
+        pystray.MenuItem("Abrir pasta dos MP3", lambda: os.startfile(pasta_saida())),  # noqa: S606
+        pystray.MenuItem("Iniciar com o Windows",
+                         lambda _i, item: definir_inicio_windows(not item.checked),
+                         checked=lambda _item: bool(inicia_com_windows())),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Sair", sair),
+    )
+    imagem = Image.open(os.path.join(BASE, "static", "icone.png"))
+    pystray.Icon("youtube-mp3", imagem, "YouTube MP3", menu).run()
+
+
 def main() -> None:
-    if "--servidor" in sys.argv:  # modo servidor puro (ex.: uso futuro via Tailscale)
-        app.run(host="0.0.0.0", port=int(os.environ.get("PORT", PORTA_PADRAO)), threaded=True)
+    segundo_plano = "--segundo-plano" in sys.argv
+    if "--servidor" in sys.argv:  # modo servidor puro, sem janela nem bandeja
+        app.run(host="0.0.0.0", port=PORTA_PADRAO, threaded=True)
         return
 
-    if ja_esta_rodando(PORTA_PADRAO):
-        abrir_janela(f"http://127.0.0.1:{PORTA_PADRAO}")
+    endereco = f"http://127.0.0.1:{PORTA_PADRAO}"
+    if ja_esta_rodando(PORTA_PADRAO):        # já aberto: só mostra a janela
+        if not segundo_plano:
+            abrir_janela(endereco)
         return
 
-    porta = porta_livre(PORTA_PADRAO)
-    endereco = f"http://127.0.0.1:{porta}"
+    # 0.0.0.0 para o Tailscale alcançar; o filtro de IP barra o resto da rede.
     servidor = threading.Thread(
-        target=lambda: app.run(host="127.0.0.1", port=porta, threaded=True), daemon=True)
+        target=lambda: app.run(host="0.0.0.0", port=PORTA_PADRAO, threaded=True), daemon=True)
     servidor.start()
     for _ in range(50):  # espera o servidor responder
-        if ja_esta_rodando(porta):
+        if ja_esta_rodando(PORTA_PADRAO):
             break
         time.sleep(0.1)
-    vigiar(abrir_janela(endereco))
+
+    processo = None if segundo_plano else abrir_janela(endereco)
+    if sys.platform == "win32":
+        try:
+            rodar_bandeja(endereco)
+            return
+        except Exception as e:  # noqa: BLE001
+            print("Bandeja indisponível:", e, file=sys.stderr)
+        if segundo_plano:          # sem bandeja e sem janela: só atende o celular
+            threading.Event().wait()
+    vigiar(processo)
 
 
 if __name__ == "__main__":

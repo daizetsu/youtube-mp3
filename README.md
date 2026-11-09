@@ -9,7 +9,17 @@ Cole um link do YouTube e baixe o áudio em **MP3 320 kbps** (com título e capa
 4. Para ter atalho: clique com o botão direito no ícone da barra de tarefas → **Fixar na barra de tarefas**.
 
 Na primeira vez o Windows pode avisar "O Windows protegeu o computador" (o programa não tem assinatura digital): clique em **Mais informações → Executar assim mesmo**.
-Fechar a janela encerra o programa. Não precisa instalar Python nem ffmpeg.
+Não precisa instalar Python nem ffmpeg.
+
+## Usar no iPhone de qualquer lugar (Tailscale)
+1. Instale o **Tailscale** no PC e no iPhone (tailscale.com/download) e entre com a **mesma conta** nos dois.
+2. No PC, abra o YouTube MP3 e clique em **Usar no iPhone (Tailscale)**: aparece um QR code.
+3. No iPhone, aponte a câmera para o QR code. No Safari, toque em **Compartilhar → Adicionar à Tela de Início**.
+4. Pronto: o ícone na tela do iPhone abre o app no Safari. Os MP3 vão para o app **Arquivos**.
+
+O PC precisa estar ligado com o app rodando. Fechar a janela **não** desliga o app: ele fica no ícone ao lado do relógio
+(menu: Abrir / Abrir pasta / Iniciar com o Windows / Sair). Marque **Iniciar com o Windows** para ele estar sempre pronto.
+Só o próprio PC e os aparelhos da sua conta Tailscale conseguem acessar; o resto da rede é bloqueado.
 
 ## Rodar a partir do código (desenvolvedores)
 

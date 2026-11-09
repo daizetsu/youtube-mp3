@@ -32,7 +32,7 @@ jobs:
           Expand-Archive deno.zip -DestinationPath ffmpeg
 
       - name: Gerar YouTube-MP3.exe
-        run: pyinstaller --onefile --name YouTube-MP3 --add-data "templates;templates" --add-data "ffmpeg;ffmpeg" app.py
+        run: pyinstaller --onefile --name YouTube-MP3 --icon icone.ico --noconsole --hidden-import pystray._win32 --add-data "static;static" --add-data "templates;templates" --add-data "ffmpeg;ffmpeg" app.py
 
       - uses: actions/upload-artifact@v4
         with:

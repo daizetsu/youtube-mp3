@@ -1,0 +1,9 @@
+{
+  "name": "YouTube MP3",
+  "short_name": "YouTube MP3",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f6f6f4",
+  "theme_color": "#d93025",
+  "icons": [{ "src": "/static/icone.png", "sizes": "256x256", "type": "image/png" }]
+}
